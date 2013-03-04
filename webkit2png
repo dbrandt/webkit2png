@@ -28,6 +28,7 @@ __version__ = "0.6 beta"
 
 import sys
 import optparse
+from urlparse import urlsplit, urlunsplit
 
 try:
   import Foundation
@@ -82,7 +83,7 @@ class WebkitLoad (Foundation.NSObject, WebKit.protocols.WebFrameLoadDelegate):
        import os
        dir = os.path.abspath(os.path.expanduser(options.dir))
        if not os.path.exists(options.dir):
-	        os.makedirs(dir)
+                os.makedirs(dir)
        return os.path.join(dir,filename)
 
     def saveImages(self,bitmapdata,filename,options):
@@ -104,15 +105,15 @@ class WebkitLoad (Foundation.NSObject, WebKit.protocols.WebFrameLoadDelegate):
             AppKit.NSGraphicsContext.currentContext().setImageInterpolation_(
                     AppKit.NSImageInterpolationHigh)
             thumbRect = Foundation.NSMakeRect(0.0, 0.0, thumbWidth, thumbHeight)
-            clipRect = Foundation.NSMakeRect(0.0, 
-                    thumbHeight-options.clipheight, 
+            clipRect = Foundation.NSMakeRect(0.0,
+                    thumbHeight-options.clipheight,
                     options.clipwidth, options.clipheight)
             bitmapdata.drawInRect_(thumbRect)
             thumbOutput = AppKit.NSBitmapImageRep.alloc().initWithFocusedViewRect_(thumbRect)
             clipOutput = AppKit.NSBitmapImageRep.alloc().initWithFocusedViewRect_(clipRect)
             scratch.unlockFocus()
-           
-            # save the thumbnails as pngs 
+
+            # save the thumbnails as pngs
             if options.thumb:
                 thumbOutput.representationUsingType_properties_(
                         AppKit.NSPNGFileType,None
@@ -127,17 +128,25 @@ class WebkitLoad (Foundation.NSObject, WebKit.protocols.WebFrameLoadDelegate):
             if self.urls[0] == '-':
                 url = sys.stdin.readline().rstrip()
                 if not url: AppKit.NSApplication.sharedApplication().terminate_(None)
-            else: 
+            else:
                 url = self.urls.pop(0)
         else:
             AppKit.NSApplication.sharedApplication().terminate_(None)
+
         print "Fetching", url, "..."
         self.resetWebview(webview)
         webview.mainFrame().loadRequest_(Foundation.NSURLRequest.requestWithURL_(Foundation.NSURL.URLWithString_(url)))
         if not webview.mainFrame().provisionalDataSource():
-            print " ... not a proper url?"
-            self.getURL(webview)
-     
+            # Split URL, attempt IDNA conversion of netloc and try again.
+            parts = urlsplit(url)
+            netloc = parts.netloc.decode("utf8").encode("IDNA")
+            url = urlunsplit([parts[0], netloc] + list(parts[2:]))
+            self.resetWebview(webview)
+            webview.mainFrame().loadRequest_(Foundation.NSURLRequest.requestWithURL_(Foundation.NSURL.URLWithString_(url)))
+            if not webview.mainFrame().provisionalDataSource():
+              print " ... not a proper url?"
+              self.getURL(webview)
+
     def resetWebview(self,webview):
         rect = Foundation.NSMakeRect(0,0,self.options.initWidth,self.options.initHeight)
         window = webview.window()
@@ -187,9 +196,9 @@ class WebkitLoad (Foundation.NSObject, WebKit.protocols.WebFrameLoadDelegate):
             view = webview.mainFrame().frameView().documentView()
 
             URL = webview.mainFrame().dataSource().initialRequest().URL().absoluteString()
-            filename = self.makeFilename(URL, self.options) 
+            filename = self.makeFilename(URL, self.options)
 
-            bitmapdata = self.captureView(view)  
+            bitmapdata = self.captureView(view)
             self.saveImages(bitmapdata,filename,self.options)
 
             print " ... done"
@@ -310,9 +319,9 @@ Examples:
        options.initWidth = options.width
     if options.height>options.initHeight:
        options.initHeight = options.height
-      
+
     app = AppKit.NSApplication.sharedApplication()
-    
+
     # create an app delegate
     delegate = AppDelegate.alloc().init()
     AppKit.NSApp().setDelegate_(delegate)
@@ -320,7 +329,7 @@ Examples:
     # create a window
     rect = Foundation.NSMakeRect(0,0,100,100)
     win = AppKit.NSWindow.alloc()
-    win.initWithContentRect_styleMask_backing_defer_ (rect, 
+    win.initWithContentRect_styleMask_backing_defer_ (rect,
             AppKit.NSBorderlessWindowMask, 2, 0)
     if options.debug:
       win.orderFrontRegardless()
@@ -341,14 +350,14 @@ Examples:
 
     # add the webview to the window
     win.setContentView_(webview)
-    
+
     # create a LoadDelegate
     loaddelegate = WebkitLoad.alloc().init()
     loaddelegate.options = options
     loaddelegate.urls = args
     webview.setFrameLoadDelegate_(loaddelegate)
-    
-    app.run()    
+
+    app.run()
 
 if __name__ == '__main__' : main()
 
